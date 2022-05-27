@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include<unistd.h>
 
 //Kind of Token
 typedef enum{
@@ -22,13 +23,19 @@ struct Token{
     char *str;//トークン文字列
 };
 
+char *user_input;
+
 Token *token;
 
-void error(char *fmt,...){
+void error_at(char *loc,char *fmt,...){
     va_list ap;
     va_start(ap,fmt);
+
+    int pos = loc-user_input;
+    fprintf(stderr,"%s\n",user_input);
+    fprintf(stderr,"%*s",pos," ");
+    fprintf(stderr,"^ ");
     vfprintf(stderr,fmt,ap);
-    fprintf(stderr,"\n");
     exit(1);
 }
 
@@ -40,13 +47,14 @@ Token *new_token(TokenKind kind,Token *cur,char *str){
     return tok;
 }
 
-Token *tokenize(char *p){
-    //printf("%c",*p);
+Token *tokenize(){
+    char *p = user_input;
     Token head;
     head.next=NULL;
     Token *cur =&head;
-    while(*p){//スペースなら次にすすむ
-        if(isspace(*p)){
+    //sleep(30);
+    while(*p){
+        if(isspace(*p)){//スペースなら次
             p++;
             continue;
         }
@@ -59,15 +67,15 @@ Token *tokenize(char *p){
             cur->val=strtol(p,&p,10);
             continue;
         }
-        error("cant tokenize");
+        error_at(p,"cant tokenize");
     }
-        new_token(TK_EOF,cur,p);
-        return head.next;
+    new_token(TK_EOF,cur,p);
+    return head.next;
 }
 
 int expect_number(){
     if(token->kind!=TK_NUM){
-        error("not digit");
+        error_at(token->str,"not digit");
     }
     int val=token->val;
     //printf("%d\n",val);
@@ -80,7 +88,7 @@ bool at_eof(){
 }
 
 bool consume(char op){
-    if(token->kind!=TK_RESERVED||token->str[0]!=op){
+    if(token->kind!=TK_RESERVED||token->str[0]!=op){//数値または'+'以外の時falseを返却
         return false;
     }
     token=token->next;
@@ -89,9 +97,9 @@ bool consume(char op){
 
 void expect(char op){
     if(token->kind!=TK_RESERVED|| token->str[0]!=op){
-        error("Not %c",op);
+        error_at(token->str,"Not %c",op);
     }
-        token=token->next;
+    token=token->next;
 }
 
 int main(int argc,char **argv){
@@ -99,21 +107,23 @@ int main(int argc,char **argv){
         fprintf(stderr,"引数の個数がだめ");
         return 1;
     }
-    token=tokenize(argv[1]);
+
+    user_input = argv[1];
+    token=tokenize();
 
     //base(for intel arch)
     printf(".intel_syntax noprefix\n");
     printf(".global main\n");
     printf("main:\n");
-    
+
     printf("  mov rax, %d\n",expect_number());
     while(!at_eof()){//生成したトークンの数だけ繰り返す "5+20 - 4"->'5','+',"20",'-','4'
-       if(consume('+')){
-          printf("  add rax, %d\n",expect_number());
-          continue;
-       }
-       expect('-');
-       printf("  sub rax, %d\n",expect_number());
+        if(consume('+')){
+            printf("  add rax, %d\n",expect_number());
+            continue;
+        }
+        expect('-');
+        printf("  sub rax, %d\n",expect_number());
     }
     printf("  ret\n ");
     return 0;
